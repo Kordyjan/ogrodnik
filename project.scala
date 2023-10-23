@@ -1,7 +1,7 @@
 //> using scala 3.3.1
-//> using jvm 8
+//> using jvm 11
 
-//> using toolkit 0.2.0
+//> using toolkit 0.2.1
 //> using lib org.eclipse.jgit:org.eclipse.jgit:6.7.0.202309050840-r
 //> using lib org.slf4j:slf4j-simple:2.0.9
 

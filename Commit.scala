@@ -23,6 +23,12 @@ class Commit private[ogrodnik] (commit: RevCommit)(using repo: Repo):
 
   def shortSha(length: Int = 7) = parsed.getId().abbreviate(length).name()
 
+  def displayName =
+    val lines = LazyList.from(message.linesIterator)
+    val title = lines.head
+    val cont = if lines.drop(1).isEmpty then "" else "..."
+    s"${shortSha()} $title$cont"
+
   override def toString(): String = shortSha()
 
   override def equals(x: Any): Boolean = x match
