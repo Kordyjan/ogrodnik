@@ -80,6 +80,11 @@ class Commit private[ogrodnik] (commit: RevCommit)(using repo: Repo):
   def isReachableFrom(other: Commit): Boolean =
     mergeBasesWith(other).exists(_ == this)
 
+  lazy val cherryPickedFrom: Option[Commit] =
+    val CherryPicked = """\[Cherry-picked ([0-9a-f]+)\].*""".r
+    message.linesIterator.collectFirst:
+      case CherryPicked(sha) => repo.resolve(sha)
+
 
   private def treeParser =
     val tree = parsed.getTree()
