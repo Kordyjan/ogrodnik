@@ -60,7 +60,10 @@ class Commit private[ogrodnik] (commit: RevCommit)(using repo: Repo):
         val conflicts = git.status().call().getConflicting().asScala.toSet
         CherryPickConflict(this, previousHead, conflicts)
       case CherryPickStatus.FAILED =>
-        CherryPickError(this, translateFailReasons(result.getFailingPaths().asScala.toMap))
+        CherryPickError(
+          this,
+          translateFailReasons(result.getFailingPaths().asScala.toMap)
+        )
 
   private def treeParser =
     val tree = parsed.getTree()
@@ -75,7 +78,11 @@ sealed trait CherryPickResult
 
 object CherryPickDone extends CherryPickResult
 
-case class CherryPickConflict(commit: Commit, previousHead: Commit, conflicts: Set[String]) extends CherryPickResult:
+case class CherryPickConflict(
+    commit: Commit,
+    previousHead: Commit,
+    conflicts: Set[String]
+) extends CherryPickResult:
   def markResolved(using Repo, OnBranch) =
     git.add().addFilepattern(conflicts.mkString(" ")).call()
     val newMessage = nameCherryPickedCommit(commit, true)
@@ -84,15 +91,21 @@ case class CherryPickConflict(commit: Commit, previousHead: Commit, conflicts: S
   def abort(using Repo, OnBranch) =
     git.reset().setMode(ResetType.HARD).setRef(previousHead.sha).call()
 
-case class CherryPickError(commit: Commit, reason: String) extends CherryPickResult:
+case class CherryPickError(commit: Commit, reason: String)
+    extends CherryPickResult:
   def retry(using OnBranch) = commit.cherryPick
 
-private def translateFailReasons(map: Map[String, MergeFailureReason]): String = map
-  .map: (path, reason) =>
-    s"${reason.toString()}: $path"
-  .mkString("\n")
+private def translateFailReasons(map: Map[String, MergeFailureReason]): String =
+  map
+    .map: (path, reason) =>
+      s"${reason.toString()}: $path"
+    .mkString("\n")
 
-private def nameCherryPickedCommit(original: Commit, modified: Boolean)(using Repo) =
-  val padded = original.message + (if original.message.linesIterator.length > 1 then "\n" else "\n\n")
+private def nameCherryPickedCommit(original: Commit, modified: Boolean)(using
+    Repo
+) =
+  val padded =
+    original.message + (if original.message.linesIterator.length > 1 then "\n"
+                        else "\n\n")
   val newMsg = padded + s"[Cherry-picked ${original.sha}]"
   newMsg + (if modified then "[modified]" else "")
