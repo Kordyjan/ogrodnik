@@ -9,6 +9,7 @@ import org.eclipse.jgit.merge.ResolveMerger.MergeFailureReason
 import org.eclipse.jgit.api.ResetCommand.ResetType
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.revwalk.filter.RevFilter
+import scala.util.Using
 
 class Commit private[ogrodnik] (commit: RevCommit)(using repo: Repo):
   private lazy val parsed =
@@ -68,12 +69,16 @@ class Commit private[ogrodnik] (commit: RevCommit)(using repo: Repo):
         )
 
   def mergeBasesWith(other: Commit): LazyList[Commit] =
-    val walk = RevWalk(repository)
-    walk.markStart(walk.parseCommit(parsed))
-    walk.markStart(walk.parseCommit(other.parsed))
-    walk.setRevFilter(RevFilter.MERGE_BASE)
-    LazyList.unfold(walk): w =>
-      Option(w.next()).map(c => (Commit(c), w))
+    Using.resource(RevWalk(repository)): walk =>
+      walk.markStart(walk.parseCommit(parsed))
+      walk.markStart(walk.parseCommit(other.parsed))
+      walk.setRevFilter(RevFilter.MERGE_BASE)
+      LazyList.unfold(walk): w =>
+        Option(w.next()).map: c =>
+          (Commit(c), w)
+
+  def isReachableFrom(other: Commit): Boolean =
+    mergeBasesWith(other).exists(_ == this)
 
 
   private def treeParser =
