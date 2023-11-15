@@ -50,6 +50,10 @@ class Repo private (private[ogrodnik] val git: Git):
     git.checkout().setName(branch).call()
     block(using this, new OnBranch {})
 
+  def onNewBranch[T](branch: String)(block: (Repo, OnBranch) ?=> T): T =
+    git.checkout().setCreateBranch(true).setName(branch).call()
+    block(using this, new OnBranch {})
+
 object Repo:
   def open(path: Path): Repo =
     new Repo(Git.open(path.toIO))
