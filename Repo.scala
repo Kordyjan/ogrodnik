@@ -48,11 +48,11 @@ class Repo private (private[ogrodnik] val git: Git):
 
   def onBranch[T](branch: String)(block: (Repo, OnBranch) ?=> T): T =
     git.checkout().setName(branch).call()
-    block(using this, new OnBranch {})
+    block(using this, new OnBranch { val name = branch })
 
   def onNewBranch[T](branch: String)(block: (Repo, OnBranch) ?=> T): T =
     git.checkout().setCreateBranch(true).setName(branch).call()
-    block(using this, new OnBranch {})
+    block(using this, new OnBranch { val name = branch })
 
 object Repo:
   def open(path: Path): Repo =
@@ -62,4 +62,5 @@ def git(using repo: Repo): Git = repo.git
 def repository(using repo: Repo): org.eclipse.jgit.lib.Repository =
   repo.git.getRepository()
 
-sealed trait OnBranch
+sealed trait OnBranch:
+  val name: String
