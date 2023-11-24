@@ -10,12 +10,26 @@ import org.eclipse.jgit.transport.sshd.SshdSessionFactory
 import org.eclipse.jgit.transport.SshSessionFactory
 import org.eclipse.jgit.transport.sshd.JGitKeyCache
 import org.eclipse.jgit.transport.sshd.DefaultProxyDataFactory
+import org.eclipse.jgit.api.RebaseCommand.InteractiveHandler
+import org.eclipse.jgit.lib.RebaseTodoLine
+import java.{util => ju}
+import org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode
 
 class Repo private (private[ogrodnik] val git: Git):
   def resolve(rev: String): Commit =
     val repository = git.getRepository()
     val id = repository.resolve(rev)
     Commit(repository.parseCommit(id))(using this)
+
+  def sync(ref: String): Unit =
+    if (git.branchList().call().asScala.exists(_.getName() == s"refs/heads/$ref")) then
+      git.checkout().setName(ref).call()
+    else
+      git.checkout().setName(ref)
+        .setCreateBranch(true)
+        .setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
+        .setStartPoint(s"origin/$ref").call()
+    git.pull().call()
 
   def linearHistory(include: String, exclude: String)(
       mergeFilter: Commit => Boolean
@@ -59,6 +73,18 @@ class Repo private (private[ogrodnik] val git: Git):
     git.pull().call()
     git.checkout().setCreateBranch(true).setName(name).call()
     block(using this, OnBranch(name))
+
+  def rebase(branch: String, newBase: String, branchingPoint: String): Unit =
+    val branchingSha = resolve(branchingPoint).sha
+    git.checkout().setName(branch).call()
+    val handler = new InteractiveHandler {
+      override def prepareSteps(steps: ju.List[RebaseTodoLine]): Unit =
+        val toRemove = steps.asScala.indexWhere(_.getCommit().name() == branchingSha)
+        steps.asScala.remove(0, toRemove + 1)
+      override def modifyCommitMessage(message: String) = message
+    }
+    val res = git.rebase().runInteractively(handler).setUpstream(newBase).call()
+    println(res)
 
 object Repo:
   def open(path: Path): Repo =
