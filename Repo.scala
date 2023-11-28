@@ -29,7 +29,9 @@ class Repo private (private[ogrodnik] val git: Git):
         .setCreateBranch(true)
         .setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
         .setStartPoint(s"origin/$ref").call()
-    git.pull().call()
+    val res = git.pull().call()
+    if !res.isSuccessful() then
+      throw new Exception(s"Failed to pull:\n $res")
 
   def linearHistory(include: String, exclude: String)(
       mergeFilter: Commit => Boolean
@@ -74,17 +76,28 @@ class Repo private (private[ogrodnik] val git: Git):
     git.checkout().setCreateBranch(true).setName(name).call()
     block(using this, OnBranch(name))
 
+
+  // TODO: this is just a stub, it only work sometimes
   def rebase(branch: String, newBase: String, branchingPoint: String): Unit =
     val branchingSha = resolve(branchingPoint).sha
+    println(s"branch: $branch, newBase: $newBase, branchingPoint: $branchingPoint")
+    println(s"branch: ${resolve(branch).sha}, newBase: ${resolve(newBase).sha}, branchingPoint: ${resolve(branchingPoint).sha}")
     git.checkout().setName(branch).call()
     val handler = new InteractiveHandler {
       override def prepareSteps(steps: ju.List[RebaseTodoLine]): Unit =
-        val toRemove = steps.asScala.indexWhere(_.getCommit().name() == branchingSha)
+        println("before:")
+        steps.asScala.foreach: s =>
+          println(s"\t${s.getAction()} ${s.getCommit().name()}")
+        val toRemove = steps.asScala.indexWhere: c =>
+          branchingSha.startsWith(c.getCommit().name())
+        println("after:")
+        steps.asScala.foreach: s =>
+          println(s"\t${s.getAction()} ${s.getCommit().name()}")
         steps.asScala.remove(0, toRemove + 1)
       override def modifyCommitMessage(message: String) = message
     }
     val res = git.rebase().runInteractively(handler).setUpstream(newBase).call()
-    println(res)
+    println(res.getStatus())
 
 object Repo:
   def open(path: Path): Repo =
