@@ -105,7 +105,11 @@ case class CherryPickConflict(
     conflicts: Set[String]
 ) extends CherryPickResult:
   def markResolved(using Repo, OnBranch) =
-    git.add().addFilepattern(conflicts.mkString(" ")).call()
+    val addCommand = git.add()
+    conflicts
+      .foldLeft(addCommand): (cmd, path) =>
+        cmd.addFilepattern(path)
+      .call()
     val newMessage = nameCherryPickedCommit(commit, true)
     git.commit().setMessage(newMessage).call()
 
