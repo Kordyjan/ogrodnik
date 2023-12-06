@@ -14,6 +14,8 @@ import org.eclipse.jgit.api.RebaseCommand.InteractiveHandler
 import org.eclipse.jgit.lib.RebaseTodoLine
 import java.{util => ju}
 import org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode
+import org.eclipse.jgit.api.RebaseCommand
+import org.eclipse.jgit.api.RebaseResult
 
 class Repo private (private[ogrodnik] val git: Git):
   def resolve(rev: String): Commit =
@@ -29,9 +31,21 @@ class Repo private (private[ogrodnik] val git: Git):
         .setCreateBranch(true)
         .setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
         .setStartPoint(s"origin/$ref").call()
-    val res = git.pull().call()
+    val res = git.pull().setRebase(true).call()
     if !res.isSuccessful() then
       throw new Exception(s"Failed to pull:\n $res")
+
+  def syncWithBase(ref: String, base: String): Unit =
+    if (git.branchList().call().asScala.exists(_.getName() == s"refs/heads/$ref")) then
+      git.checkout().setName(ref).call()
+    else
+      git.checkout().setName(ref)
+        .setCreateBranch(true)
+        .setUpstreamMode(SetupUpstreamMode.SET_UPSTREAM)
+        .setStartPoint(s"origin/$ref").call()
+    val res = git.rebase().setUpstream(base).call()
+    if !(Set("UP_TO_DATE", "FAST_FORWARD", "OK").contains(res.getStatus().toString())) then
+      throw new Exception(s"Failed to sync:\n ${res.getStatus()}")
 
   def linearHistory(include: String, exclude: String)(
       mergeFilter: Commit => Boolean
