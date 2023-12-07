@@ -6,7 +6,7 @@
 //> using lib org.eclipse.jgit:org.eclipse.jgit.ssh.apache:6.7.0.202309050840-r
 //> using lib org.slf4j:slf4j-simple:2.0.9
 
-//> using exclude playground.scala
+// > using exclude playground.scala
 
 //> using publish.organization "pro.kordyjan"
 //> using publish.name "ogrodnik"

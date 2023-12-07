@@ -15,7 +15,8 @@ import org.eclipse.jgit.lib.RebaseTodoLine
 import java.{util => ju}
 import org.eclipse.jgit.api.CreateBranchCommand.SetupUpstreamMode
 import org.eclipse.jgit.api.RebaseCommand
-import org.eclipse.jgit.api.RebaseResult
+import org.eclipse.jgit.api.RebaseResult as JRebaseResult
+import org.eclipse.jgit.api.RebaseResult.Status
 
 class Repo private (private[ogrodnik] val git: Git):
   def resolve(rev: String): Commit =
@@ -92,26 +93,41 @@ class Repo private (private[ogrodnik] val git: Git):
 
 
   // TODO: this is just a stub, it only work sometimes
-  def rebase(branch: String, newBase: String, branchingPoint: String): Unit =
+  def rebase(branch: String, newBase: String, branchingPoint: String): RebaseResult =
     val branchingSha = resolve(branchingPoint).sha
     println(s"branch: $branch, newBase: $newBase, branchingPoint: $branchingPoint")
     println(s"branch: ${resolve(branch).sha}, newBase: ${resolve(newBase).sha}, branchingPoint: ${resolve(branchingPoint).sha}")
     git.checkout().setName(branch).call()
+
     val handler = new InteractiveHandler {
+      def info(short: String): String =
+       resolve(short).displayName
+
       override def prepareSteps(steps: ju.List[RebaseTodoLine]): Unit =
         println("before:")
         steps.asScala.foreach: s =>
-          println(s"\t${s.getAction()} ${s.getCommit().name()}")
+          println(s"\t${s.getAction()} ${info(s.getCommit().name())}")
         val toRemove = steps.asScala.indexWhere: c =>
           branchingSha.startsWith(c.getCommit().name())
+        steps.asScala.remove(0, toRemove + 1)
         println("after:")
         steps.asScala.foreach: s =>
-          println(s"\t${s.getAction()} ${s.getCommit().name()}")
-        steps.asScala.remove(0, toRemove + 1)
+          println(s"\t${s.getAction()} ${info(s.getCommit().name())}")
       override def modifyCommitMessage(message: String) = message
     }
+
     val res = git.rebase().runInteractively(handler).setUpstream(newBase).call()
-    println(res.getStatus())
+    if res.getStatus().isSuccessful() then RebaseDone
+    else if res.getStatus() == Status.CONFLICTS then
+      RebaseConflict(res.getConflicts().asScala.toSet)
+    else
+      RebaseError(
+        res.getStatus().toString(),
+        this,
+        branch,
+        newBase,
+        branchingPoint
+      )
 
 object Repo:
   def open(path: Path): Repo =
@@ -124,3 +140,24 @@ def repository(using repo: Repo): org.eclipse.jgit.lib.Repository =
   repo.git.getRepository()
 
 sealed class OnBranch(val name: String)
+
+sealed trait RebaseResult
+
+object RebaseDone extends RebaseResult
+
+case class RebaseConflict(conflicts: Set[String]) extends RebaseResult:
+  def markResolved(using Repo) =
+    val addCommand = git.add()
+    conflicts
+      .foldLeft(addCommand): (cmd, path) =>
+        cmd.addFilepattern(path)
+      .call()
+    val res = git.rebase().setOperation(RebaseCommand.Operation.CONTINUE).call()
+    if res.getStatus().isSuccessful() then RebaseDone
+    else RebaseConflict(res.getConflicts().asScala.toSet)
+
+  def abort(using Repo, OnBranch) =
+    git.rebase().setOperation(RebaseCommand.Operation.ABORT).call()
+
+case class RebaseError(reason: String, repo: Repo, branch: String, newBase: String, branchingPoint: String) extends RebaseResult:
+  def retry = repo.rebase(branch, newBase, branchingPoint)
